@@ -177,8 +177,10 @@ main{position:absolute;inset:0}
 .month-h b{font-family:var(--f-display);font-size:24px;letter-spacing:.06em}
 .month-h span{font-family:var(--f-mono);font-size:11px;color:var(--muted);letter-spacing:.08em}
 .month-h em{margin-left:auto;font-style:normal;font-size:12px;color:var(--muted)}
-.band{display:flex;gap:3px;height:96px;margin-bottom:6px}
-.band button{flex:1;border:0;padding:0;border-radius:3px;min-width:6px}
+.band{display:flex;height:96px;margin-bottom:6px;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px rgb(0 0 0 / .05)}
+.band button{flex:1;border:0;padding:0;background:transparent;position:relative;min-width:6px}
+.band button::after{content:"";position:absolute;left:50%;bottom:8px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:rgb(255 255 255 / .75);box-shadow:0 0 0 1px rgb(0 0 0 / .08)}
+.band button:active{background:rgb(255 255 255 / .18)}
 .rows{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:14px 1fr auto;gap:12px;align-items:center;padding:11px 0;border:0;border-bottom:1px solid var(--hair);background:none;text-align:left}
 .row i{width:14px;height:14px;border-radius:3px;display:block}
@@ -832,7 +834,13 @@ function rowHTML(p){
   const r = p.rating ? `<span class="rt" title="${RATE_LABEL[p.rating]}">${[1,2,3,4,5].map(i=>`<i class="${i<=p.rating?"on":""}"></i>`).join("")}</span>` : "";
   return `<button class="row" data-open="${p.id}"><i style="background:${archiveColor(p)}"></i><b>${esc(p.name)}${p.sample?' <span>見本</span>':""}<span class="cn">${dento(visitHex(p)).name}</span></b><span class="rmeta">${r}<span class="mono">${fmtMD(p.visitedAt)}</span></span></button>`;
 }
-const bandHTML = ps => `<div class="band">${ps.map(p=>`<button class="press" data-open="${p.id}" style="background:${archiveColor(p)}" aria-label="${esc(p.name)}"></button>`).join("")}</div>`;
+/* 色の帯:店の色を順につないだグラデーション。各店の位置に目盛りを付け、タップで店を開く */
+function bandHTML(ps){
+  const cols = ps.map(archiveColor), n = cols.length;
+  const stops = n === 1 ? `${cols[0]}, ${cols[0]}` : cols.map((c,i) => `${c} ${((i + .5) / n * 100).toFixed(2)}%`).join(", ");
+  const bg = `background:linear-gradient(90deg, ${stops});background:linear-gradient(90deg in oklab, ${stops})`;
+  return `<div class="band" style="${bg}">${ps.map(p=>`<button data-open="${p.id}" aria-label="${esc(p.name)}"></button>`).join("")}</div>`;
+}
 function renderArchive(){
   const done = state.places.filter(p => p.visitedAt).sort((a,b)=>b.visitedAt-a.visitedAt);
   $("#archSort").hidden = done.length < 2;
