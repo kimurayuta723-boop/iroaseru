@@ -10,8 +10,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="色あせる前に">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23F3F3F0'/%3E%3Crect x='16' y='12' width='32' height='40' rx='3' fill='%23D9B9B4'/%3E%3Crect x='16' y='38' width='32' height='14' fill='%23B23A2E'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23F3F3F0'/%3E%3Crect x='16' y='12' width='32' height='40' rx='3' fill='%23D9B9B4'/%3E%3Crect x='16' y='38' width='32' height='14' fill='%23B23A2E'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%23F3F3F0%22/%3E%3Cg transform=%22translate%284.5 3.5%29 scale%28.86%29%22%3E%3Cpath d=%22M32 48 L2.66 41.76 A30 30 0 0 1 7.21 31.10Z%22 fill=%22%23B23A2E%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L7.21 31.10 A30 30 0 0 1 15.47 22.96Z%22 fill=%22%23B94A3E%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L15.47 22.96 A30 30 0 0 1 26.20 18.57Z%22 fill=%22%23BC5A4F%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L26.20 18.57 A30 30 0 0 1 37.80 18.57Z%22 fill=%22%23C47A70%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L37.80 18.57 A30 30 0 0 1 48.53 22.96Z%22 fill=%22%23C78E86%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L48.53 22.96 A30 30 0 0 1 56.79 31.10Z%22 fill=%22%23CBA39D%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M32 48 L56.79 31.10 A30 30 0 0 1 61.34 41.76Z%22 fill=%22%23C9C1BE%22 stroke=%22%23F3F3F0%22 stroke-width=%221.2%22 stroke-linejoin=%22round%22/%3E%3Ccircle cx=%2232%22 cy=%2248%22 r=%229%22 fill=%22%23F3F3F0%22/%3E%3Ccircle cx=%2232%22 cy=%2248%22 r=%222.6%22 fill=%22%23191C1E%22/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -64,7 +64,7 @@ button{cursor:pointer;-webkit-appearance:none;appearance:none}
 .topbar{position:fixed;z-index:900;top:calc(var(--sat) + 10px);left:var(--gl);right:var(--gr);height:var(--top-h);
   border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 8px 0 14px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
-.mark{width:18px;height:24px;border-radius:2px;flex:none;background:linear-gradient(180deg,#E6D6D2 0%,#D49A90 48%,#B23A2E 48%,#B23A2E 100%);box-shadow:inset 0 0 0 1px rgb(0 0 0 / .06)}
+.mark{width:34px;height:21px;flex:none;display:block}
 .brand h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:18px;letter-spacing:.14em;white-space:nowrap}
 .top-r{display:flex;align-items:center;gap:6px}
 .tally{display:flex;align-items:center;gap:2px;padding:0 6px;font-size:11px;color:var(--muted);letter-spacing:.04em;white-space:nowrap}
@@ -316,7 +316,7 @@ label.f textarea{min-height:72px;resize:vertical}
 <body>
 
 <header class="topbar glass">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><h1>色あせる前に</h1></div>
+  <div class="brand"><svg class="mark" viewBox="2 16 60 37" aria-hidden="true"><path d="M32 48 L2.66 41.76 A30 30 0 0 1 7.21 31.10Z" fill="#B23A2E" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L7.21 31.10 A30 30 0 0 1 15.47 22.96Z" fill="#B94A3E" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L15.47 22.96 A30 30 0 0 1 26.20 18.57Z" fill="#BC5A4F" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L26.20 18.57 A30 30 0 0 1 37.80 18.57Z" fill="#C47A70" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L37.80 18.57 A30 30 0 0 1 48.53 22.96Z" fill="#C78E86" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L48.53 22.96 A30 30 0 0 1 56.79 31.10Z" fill="#CBA39D" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><path d="M32 48 L56.79 31.10 A30 30 0 0 1 61.34 41.76Z" fill="#C9C1BE" stroke="var(--paper)" stroke-width="1.2" stroke-linejoin="round"/><circle cx="32" cy="48" r="9" fill="var(--paper)"/><circle cx="32" cy="48" r="2.6" fill="var(--ink)"/></svg><h1>色あせる前に</h1></div>
   <div class="top-r">
     <div class="tally" aria-live="polite">行きたい<b id="tWant">0</b>行った<b id="tDone">0</b></div>
   </div>
