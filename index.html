@@ -15,6 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css'">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
 <style>
 /* Layout: full-height app. Map fills the screen; palette = sun-bleached colour-sample chips; bottom tab bar + floating pick button. */
@@ -209,6 +210,9 @@ a.link{color:var(--ink)}
 .leaflet-tooltip-top{margin-top:-6px}
 .leaflet-fade-anim .leaflet-popup{opacity:0;transition:opacity .2s linear}
 .tiles-invert .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.9) saturate(.6)}
+.tiles-gray .leaflet-tile-pane{filter:grayscale(1) contrast(.82) brightness(1.06)}
+.tiles-gray.tiles-invert .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(.78) contrast(.85)}
+.leaflet-gl-layer{position:absolute;left:0;top:0}
 #map{background:var(--paper)}
 #miniMap{position:relative}
 .pick-pin{width:28px;height:36px;position:relative}
@@ -331,23 +335,45 @@ a.link{color:var(--ink)}
 
 <script>
 /* 地図ライブラリを複数の配信元から順に読み込む */
-window.leafletReady = new Promise(resolve => {
-  const srcs = [
+function loadOne(srcs, ok){
+  return new Promise(resolve => {
+    let i = 0;
+    (function next(){
+      if(ok()) return resolve(true);
+      if(i >= srcs.length) return resolve(false);
+      const s = document.createElement("script");
+      s.src = srcs[i++];
+      s.onload = () => ok() ? resolve(true) : next();
+      s.onerror = next;
+      document.head.appendChild(s);
+    })();
+  });
+}
+const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(false), ms))]);
+window.vectorOK = false;
+window.leafletReady = (async () => {
+  const okL = await loadOne([
     "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
     "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
-  ];
-  let i = 0;
-  (function next(){
-    if(typeof L !== "undefined") return resolve(true);
-    if(i >= srcs.length) return resolve(false);
-    const s = document.createElement("script");
-    s.src = srcs[i++];
-    s.onload = () => resolve(typeof L !== "undefined") ;
-    s.onerror = next;
-    document.head.appendChild(s);
-  })();
-});
+  ], () => typeof L !== "undefined");
+  if(!okL) return false;
+  /* シンプルな地図(ベクター地図)用。読めなければ画像の地図を使う */
+  const okM = await withTimeout(loadOne([
+    "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+    "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"
+  ], () => typeof maplibregl !== "undefined"), 8000);
+  if(okM){
+    const okP = await withTimeout(loadOne([
+      "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js",
+      "https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"
+    ], () => typeof L.maplibreGL === "function"), 6000);
+    let webgl = false;
+    try{ const c = document.createElement("canvas"); webgl = !!(c.getContext("webgl2") || c.getContext("webgl")); }catch(e){}
+    window.vectorOK = okP && webgl;
+  }
+  return true;
+})();
 </script>
 <script>
 (() => {
@@ -443,33 +469,59 @@ let hasL = false;
 let map, markerLayer, meMarker, meCircle, filter = "want";
 const darkQ = matchMedia("(prefers-color-scheme: dark)");
 function isDark(){ const t = document.documentElement.dataset.theme; return t ? t === "dark" : darkQ.matches; }
-/* 地図画像の配信元。つながらなければ順に次へ切り替える */
+/* 地図の配信元。つながらなければ順に次へ切り替える */
 const PROVIDERS = [
+  { id:"ofm", vector:true, style:"https://tiles.openfreemap.org/styles/positron",
+    attr:'<a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', invertInDark:true },
   { id:"gsi",  url:() => "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", opt:{ maxNativeZoom:18, maxZoom:19 },
-    attr:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>', invertInDark:true },
+    attr:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>', invertInDark:true, gray:true },
   { id:"osm",  url:() => "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opt:{ maxZoom:19 },
-    attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', invertInDark:true },
+    attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', invertInDark:true, gray:true },
 ];
 let provIdx = 0;
 function applyTileTone(){
-  const inv = isDark() && PROVIDERS[provIdx].invertInDark;
-  document.documentElement.classList.toggle("tiles-invert", !!inv);
+  const pv = PROVIDERS[provIdx];
+  document.documentElement.classList.toggle("tiles-invert", !!(isDark() && pv.invertInDark));
+  document.documentElement.classList.toggle("tiles-gray", !!pv.gray);
+}
+function nextProvider(){
+  if(provIdx < PROVIDERS.length - 1){ provIdx++; rebuildTiles(); return true; }
+  geoNote("地図の画像を読み込めません。通信状態や、広告ブロックなどの設定を確認してください。", "tile");
+  return false;
+}
+/* ベクター地図をさらに簡素化:店・施設アイコンや番地を消し、地名を日本語に */
+function simplifyStyle(gl){
+  try{
+    gl.getStyle().layers.forEach(l => {
+      const id = l.id.toLowerCase();
+      if(/poi|housenum|aerodrome|airport|transit|rail.*label|oneway|shield/.test(id)){ gl.setLayoutProperty(l.id, "visibility", "none"); return; }
+      if(l.type === "symbol" && l.layout && l.layout["text-field"]){
+        gl.setLayoutProperty(l.id, "text-field", ["coalesce", ["get","name:ja"], ["get","name"]]);
+      }
+    });
+  }catch(e){}
 }
 const tileLayers = []; // {layer, withAttr, map}
 function makeTiles(targetMap, withAttr){
+  if(PROVIDERS[provIdx].vector && !window.vectorOK) provIdx++;
   const pv = PROVIDERS[provIdx];
-  const layer = L.tileLayer(pv.url(), Object.assign({ attribution: withAttr ? pv.attr : "" }, pv.opt)).addTo(targetMap);
-  const rec = { layer, withAttr, map: targetMap, errs:0, oks:0 };
-  layer.on("tileload", () => { rec.oks++; if(withAttr && $("#geoNote").dataset.kind === "tile") { geoNote(""); } });
-  layer.on("tileerror", () => {
-    rec.errs++;
-    if(rec.oks === 0 && rec.errs >= 4){
-      if(provIdx < PROVIDERS.length - 1){ provIdx++; rebuildTiles(); }
-      else if(withAttr){ geoNote("地図の画像を読み込めません。通信状態や、広告ブロックなどの設定を確認してください。", "tile"); }
-    }
-  });
+  const rec = { withAttr, map: targetMap, errs:0, oks:0, pv };
+  if(pv.vector){
+    const layer = L.maplibreGL({ style: pv.style, attribution: withAttr ? pv.attr : "", interactive:false }).addTo(targetMap);
+    rec.layer = layer;
+    const gl = layer.getMaplibreMap();
+    let loaded = false;
+    gl.on("load", () => { loaded = true; simplifyStyle(gl); if(withAttr && $("#geoNote").dataset.kind === "tile") geoNote(""); });
+    gl.on("error", () => { rec.errs++; if(!loaded && rec.errs >= 3 && rec.pv === PROVIDERS[provIdx]) nextProvider(); });
+    setTimeout(() => { if(!loaded && rec.pv === PROVIDERS[provIdx] && tileLayers.includes(rec)) nextProvider(); }, 10000);
+  } else {
+    const layer = L.tileLayer(pv.url(), Object.assign({ attribution: withAttr ? pv.attr : "" }, pv.opt)).addTo(targetMap);
+    rec.layer = layer;
+    layer.on("tileload", () => { rec.oks++; if(withAttr && $("#geoNote").dataset.kind === "tile") geoNote(""); });
+    layer.on("tileerror", () => { rec.errs++; if(rec.oks === 0 && rec.errs >= 4 && rec.pv === PROVIDERS[provIdx]) nextProvider(); });
+  }
   tileLayers.push(rec);
-  return layer;
+  return rec.layer;
 }
 function rebuildTiles(){
   const olds = tileLayers.splice(0);
