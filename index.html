@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
 <style>
 /* Layout: full-height app. Map fills the screen; palette = sun-bleached colour-sample chips; bottom tab bar + floating pick button. */
 :root{
@@ -293,7 +293,26 @@ a.link{color:var(--ink)}
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* 地図ライブラリを複数の配信元から順に読み込む */
+window.leafletReady = new Promise(resolve => {
+  const srcs = [
+    "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+  ];
+  let i = 0;
+  (function next(){
+    if(typeof L !== "undefined") return resolve(true);
+    if(i >= srcs.length) return resolve(false);
+    const s = document.createElement("script");
+    s.src = srcs[i++];
+    s.onload = () => resolve(typeof L !== "undefined") ;
+    s.onerror = next;
+    document.head.appendChild(s);
+  })();
+});
+</script>
 <script>
 (() => {
 "use strict";
@@ -384,7 +403,21 @@ function placeSamplesNear(c){
 }
 
 /* ---------- map ---------- */
-const hasL = typeof L !== "undefined";
+let hasL = false;
+const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+let useOSM = false;
+function makeTiles(withAttr){
+  const t = L.tileLayer(useOSM ? OSM_URL : tileUrl(), { maxZoom:19, subdomains:"abcd", attribution: withAttr ? (useOSM ? OSM_ATTR : ATTR) : "" });
+  let errs = 0, oks = 0;
+  t.on("tileload", () => { oks++; if(withAttr) geoNote(""); });
+  t.on("tileerror", () => {
+    errs++;
+    if(!useOSM && errs >= 4 && oks === 0){ useOSM = true; t.setUrl(OSM_URL); errs = 0; if(withAttr && map) { map.attributionControl.removeAttribution(ATTR); map.attributionControl.addAttribution(OSM_ATTR); } }
+    else if(useOSM && errs >= 4 && oks === 0 && withAttr){ geoNote("地図の画像を読み込めません。通信状態を確認してください。"); }
+  });
+  return t;
+}
 let map, markerLayer, meMarker, meCircle, filter = "want";
 const darkQ = matchMedia("(prefers-color-scheme: dark)");
 function isDark(){ const t = document.documentElement.dataset.theme; return t ? t === "dark" : darkQ.matches; }
@@ -394,9 +427,11 @@ let tiles;
 function initMap(){
   if(!hasL){ geoNote("地図ライブラリを読み込めませんでした。通信状態を確認して再読み込みしてください。"); return; }
   map = L.map("map", { zoomControl:false, attributionControl:true }).setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 15);
-  tiles = L.tileLayer(tileUrl(), { maxZoom: 19, subdomains:"abcd", attribution: ATTR }).addTo(map);
+  tiles = makeTiles(true).addTo(map);
   markerLayer = L.layerGroup().addTo(map);
-  darkQ.addEventListener?.("change", () => { tiles.setUrl(tileUrl()); renderAll(); });
+  darkQ.addEventListener?.("change", () => { if(!useOSM) tiles.setUrl(tileUrl()); renderAll(); });
+  window.addEventListener("resize", () => map.invalidateSize());
+  setTimeout(() => map.invalidateSize(), 300);
 }
 function renderMarkers(){
   if(!map) return;
@@ -626,7 +661,7 @@ function setupMiniMap(){
   const start = me || (map ? map.getCenter() : DEFAULT_CENTER);
   if(!miniMap){
     miniMap = L.map("miniMap", { zoomControl:false, attributionControl:false }).setView([start.lat, start.lng], 17);
-    L.tileLayer(tileUrl(), { maxZoom:19, subdomains:"abcd" }).addTo(miniMap);
+    makeTiles(false).addTo(miniMap);
     miniMarker = L.marker([start.lat, start.lng], { draggable:true }).addTo(miniMap);
     miniMarker.on("dragend", () => { const ll = miniMarker.getLatLng(); setPickLoc({lat:ll.lat,lng:ll.lng}, false); });
     miniMap.on("click", e => { miniMarker.setLatLng(e.latlng); setPickLoc({lat:e.latlng.lat,lng:e.latlng.lng}, false); });
@@ -741,10 +776,14 @@ function toast(html, color, actLabel, act){
 
 /* ---------- boot ---------- */
 seed();
-initMap();
 renderAll();
-fitAll();
-startGeo();
+window.leafletReady.then(ok => {
+  hasL = ok;
+  initMap();
+  renderAll();
+  fitAll();
+  startGeo();
+});
 setInterval(renderAll, 60*60*1000); // 色あせを1時間ごとに更新
 document.addEventListener("visibilitychange", () => { if(!document.hidden) renderAll(); });
 })();
