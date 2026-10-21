@@ -447,8 +447,6 @@ function isDark(){ const t = document.documentElement.dataset.theme; return t ? 
 const PROVIDERS = [
   { id:"gsi",  url:() => "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", opt:{ maxNativeZoom:18, maxZoom:19 },
     attr:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>', invertInDark:true },
-  { id:"carto",url:() => `https://{s}.basemaps.cartocdn.com/${isDark() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, opt:{ subdomains:"abcd", maxZoom:19 },
-    attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' },
   { id:"osm",  url:() => "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opt:{ maxZoom:19 },
     attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', invertInDark:true },
 ];
@@ -485,7 +483,7 @@ function initMap(){
   makeTiles(map, true);
   applyTileTone();
   markerLayer = L.layerGroup().addTo(map);
-  darkQ.addEventListener?.("change", () => { if(PROVIDERS[provIdx].id === "carto") rebuildTiles(); applyTileTone(); renderAll(); });
+  darkQ.addEventListener?.("change", () => { applyTileTone(); renderAll(); });
   window.addEventListener("resize", () => map.invalidateSize());
   setTimeout(() => map.invalidateSize(), 300);
 }
