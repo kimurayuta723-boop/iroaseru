@@ -600,7 +600,7 @@ function daysLeft(p){ return Math.max(0, Math.ceil(LIMIT - daysSince(p.savedAt))
 const RATE_F = [0, .12, .3, .52, .76, 1];
 const RATE_LABEL = ["", "もう行かない", "いまひとつ", "ふつう", "また行きたい", "とっておき"];
 const ratedColor = (hex, r) => fadedHex(hex, RATE_F[r]);
-const visitHex = p => p.visitColor || p.color;
+const visitHex = p => p.color;
 const archiveColor = p => p.rating ? ratedColor(visitHex(p), p.rating) : visitHex(p);
 function nowColor(p){ return p.visitedAt ? archiveColor(p) : fadedHex(p.color, fadeOf(p)); }
 const fmtDate = t => { const d=new Date(t); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`; };
@@ -718,11 +718,13 @@ function markerSVG(p){
   const R = 14, C = 2 * Math.PI * R;
   const frac = st === "want" ? daysLeft(p) / LIMIT : st === "done" ? 1 : 0;
   const arc = frac > 0 ? `<circle cx="18" cy="18" r="${R}" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="${(C*frac).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 18 18)"/>` : "";
-  const check = st === "done" ? `<path d="M13.6 18.3l2.9 2.9 5.9-6" fill="none" stroke="${onColor(col)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+  const check = st !== "done" ? "" : p.rating
+    ? `<text x="18" y="22.3" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-weight="500" font-size="12.5" fill="${onColor(col)}">${p.rating}</text>`
+    : `<path d="M13.6 18.3l2.9 2.9 5.9-6" fill="none" stroke="${onColor(col)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
   return `<svg class="mk" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
     <circle cx="18" cy="18" r="17" fill="var(--surface)"/>
     <circle cx="18" cy="18" r="${R}" fill="none" stroke="var(--hair-2)" stroke-width="2.6" ${st==="shelf"?'stroke-dasharray="2 3"':''}/>
-    ${arc}<circle cx="18" cy="18" r="9.5" fill="${col}"/>${check}</svg>`;
+    ${arc}<circle cx="18" cy="18" r="${st === "done" ? 10.5 : 9.5}" fill="${col}"/>${check}</svg>`;
 }
 function visible(p){ const st = statusOf(p); return filter === "all" || st === filter; }
 function renderMarkers(){
@@ -1053,24 +1055,19 @@ function rateHTML(p, ask){
 function updateRate(p){
   $$("#rateRow [data-rate]").forEach(b => b.setAttribute("aria-checked", String(+b.dataset.rate === p.rating)));
   $("#rateLabel").textContent = p.rating ? RATE_LABEL[p.rating] : "評価を付ける";
+  const hp = document.querySelector("#dBody .hero p"); if(hp) hp.textContent = `${fmtDate(p.visitedAt)} に行きました${p.rating ? ` ・ ${RATE_LABEL[p.rating]}` : ""}`;
   $("#rateRow").classList.remove("ask");
 }
-function cnameHTML(p){
-  if(p.visitedAt && p.visitColor && p.visitColor !== p.color)
-    return `<div class="cname two">${dentoBlock(p.color, "拾った色")}<em>→</em>${dentoBlock(p.visitColor, "行った日")}</div>`;
-  return `<div class="cname">${dentoBlock(p.visitColor || p.color, "")}</div>`;
-}
+function cnameHTML(p){ return `<div class="cname">${dentoBlock(p.color, "")}</div>`; }
 function openDetail(id, opt = {}){
   const p = state.places.find(x=>x.id===id); if(!p) return;
   const st = statusOf(p), f = fadeOf(p), d = daysSince(p.savedAt), now = nowColor(p);
   const sample = p.sample ? '<span class="tag">見本</span>' : "";
   let hero, timeline = "";
   if(st === "done"){
-    const vc = p.visitColor || p.color;
-    hero = `<div class="hero split" style="--a:${p.color};--b:${vc};color:${onColor(vc)}">
-      ${sample}<span class="half" style="left:16px;${p.sample?'top:42px':''}">${fmtMD(p.savedAt)} 拾った色</span>
+    hero = `<div class="hero" style="--now:${p.color};--on:${onColor(p.color)}">${sample}
       <button class="x" data-close aria-label="閉じる">${X_ICON}</button>
-      <div style="margin-left:50%;padding-left:14px"><h2>${esc(p.name)}</h2><p>${fmtDate(p.visitedAt)} に行きました</p></div></div>`;
+      <h2>${esc(p.name)}</h2><p>${fmtDate(p.visitedAt)} に行きました${p.rating ? ` ・ ${RATE_LABEL[p.rating]}` : ""}</p></div>`;
   } else {
     hero = `<div class="hero" style="--now:${now};--on:${onColor(now)}">${sample}
       <button class="x" data-close aria-label="閉じる">${X_ICON}</button>
@@ -1091,9 +1088,9 @@ function openDetail(id, opt = {}){
     ${timeline}
     <dl class="stats">${stats}</dl>
     ${p.memo ? `<p class="memo">${esc(p.memo)}</p>` : ""}
-    ${(p.visitPhoto || p.photo) ? `<img class="thumb" src="${p.visitPhoto || p.photo}" alt="${esc(p.name)}の写真">` : ""}
+    ${p.photo ? `<img class="thumb" src="${p.photo}" alt="${esc(p.name)}の写真">` : ""}
     <div class="stack">
-      ${st !== "done" ? `<button class="btn press" id="dVisit">着いた!色を拾い直す</button>` : ""}
+      ${st !== "done" ? `<button class="btn press" id="dVisit">行った!</button>` : ""}
       ${st === "shelf" ? `<button class="btn sub press" id="dRevive">もう一度「行きたい」に戻す</button>` : ""}
       <div class="btns">
         <button class="btn sub press" id="dMap">地図で見る</button>
@@ -1109,8 +1106,11 @@ function openDetail(id, opt = {}){
     persist(); renderAll(); updateRate(p);
   }));
   $("#dVisit")?.addEventListener("click", () => {
-    if(me){ const dd = distM(me,p); if(dd > 300) toast(`店から${fmtDist(dd)}離れています。着いてから撮るのがおすすめです。`); }
-    startPick("visit", p.id);
+    const prev = { visitedAt: p.visitedAt, savedAt: p.savedAt };
+    p.visitedAt = Date.now(); persist(); renderAll(); openDetail(p.id, { askRate:true });
+    toast(`<b>${esc(p.name)}</b>を行った店にしました。`, p.color, "取り消す", () => {
+      p.visitedAt = prev.visitedAt; p.rating = null; persist(); renderAll(); openDetail(p.id);
+    });
   });
   $("#dRevive")?.addEventListener("click", () => { p.savedAt = Date.now(); persist(); renderAll(); openDetail(p.id); toast("色を元に戻しました。今度こそ行きましょう。", p.color); });
   $("#dMap").addEventListener("click", () => { closeS(); show("map"); if(map) map.flyTo([p.lat,p.lng], 17, { duration:.6 }); });
