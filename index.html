@@ -177,6 +177,42 @@ a.link{color:var(--ink)}
   @keyframes up{from{transform:translateY(24px);opacity:.6}}
   @media (min-width:640px){@keyframes up{from{transform:translate(-50%,24px);opacity:.6}}}
 }
+
+/* Leaflet 必須スタイル(外部CSSが読めなくても地図が崩れないよう内蔵) */
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+.leaflet-container{overflow:hidden;outline-offset:1px}
+.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+.leaflet-container .leaflet-tile-pane img,.leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-tile{max-width:none!important;max-height:none!important;width:auto;padding:0}
+.leaflet-container img.leaflet-tile{mix-blend-mode:normal}
+.leaflet-container.leaflet-touch-zoom{touch-action:pan-x pan-y}
+.leaflet-container.leaflet-touch-drag{touch-action:none}
+.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom{touch-action:none}
+.leaflet-tile{filter:inherit;visibility:hidden}
+.leaflet-tile-loaded{visibility:inherit}
+.leaflet-pane{z-index:400}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}.leaflet-shadow-pane{z-index:500}.leaflet-marker-pane{z-index:600}.leaflet-tooltip-pane{z-index:650}.leaflet-popup-pane{z-index:700}
+.leaflet-map-pane canvas{z-index:100}.leaflet-map-pane svg{z-index:200}
+.leaflet-control{position:relative;z-index:800;pointer-events:auto;float:left;clear:both}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+.leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+.leaflet-right .leaflet-control{float:right}
+.leaflet-zoom-animated{transform-origin:0 0}
+.leaflet-zoom-anim .leaflet-zoom-animated{transition:transform .25s cubic-bezier(0,0,.25,1)}
+.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{transition:none}
+.leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden}
+.leaflet-interactive{cursor:pointer}
+.leaflet-grab{cursor:grab}.leaflet-dragging .leaflet-grab{cursor:grabbing}
+.leaflet-marker-icon,.leaflet-image-layer,.leaflet-pane>svg path,.leaflet-tile-container{pointer-events:none}
+.leaflet-marker-icon.leaflet-interactive,.leaflet-pane>svg path.leaflet-interactive{pointer-events:auto}
+.leaflet-control-attribution{margin:0;padding:0 6px;line-height:1.5;color:#333}
+.leaflet-control-attribution a{color:#333}
+.leaflet-tooltip{position:absolute;padding:4px 8px;white-space:nowrap;pointer-events:none;-webkit-user-select:none;user-select:none}
+.leaflet-tooltip-top{margin-top:-6px}
+.leaflet-fade-anim .leaflet-popup{opacity:0;transition:opacity .2s linear}
+.tiles-invert .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.9) saturate(.6)}
+#map{background:var(--paper)}
+#miniMap{position:relative}
+.pick-pin{width:28px;height:36px;position:relative}
+.pick-pin::before{content:"";position:absolute;left:3px;top:0;width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--ink);border:3px solid var(--paper);box-shadow:0 2px 6px rgb(0 0 0 / .3)}
 </style>
 </head>
 <body>
@@ -404,32 +440,52 @@ function placeSamplesNear(c){
 
 /* ---------- map ---------- */
 let hasL = false;
-const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-let useOSM = false;
-function makeTiles(withAttr){
-  const t = L.tileLayer(useOSM ? OSM_URL : tileUrl(), { maxZoom:19, subdomains:"abcd", attribution: withAttr ? (useOSM ? OSM_ATTR : ATTR) : "" });
-  let errs = 0, oks = 0;
-  t.on("tileload", () => { oks++; if(withAttr) geoNote(""); });
-  t.on("tileerror", () => {
-    errs++;
-    if(!useOSM && errs >= 4 && oks === 0){ useOSM = true; t.setUrl(OSM_URL); errs = 0; if(withAttr && map) { map.attributionControl.removeAttribution(ATTR); map.attributionControl.addAttribution(OSM_ATTR); } }
-    else if(useOSM && errs >= 4 && oks === 0 && withAttr){ geoNote("地図の画像を読み込めません。通信状態を確認してください。"); }
-  });
-  return t;
-}
 let map, markerLayer, meMarker, meCircle, filter = "want";
 const darkQ = matchMedia("(prefers-color-scheme: dark)");
 function isDark(){ const t = document.documentElement.dataset.theme; return t ? t === "dark" : darkQ.matches; }
-function tileUrl(){ return `https://{s}.basemaps.cartocdn.com/${isDark() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`; }
-const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-let tiles;
+/* 地図画像の配信元。つながらなければ順に次へ切り替える */
+const PROVIDERS = [
+  { id:"gsi",  url:() => "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", opt:{ maxNativeZoom:18, maxZoom:19 },
+    attr:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>', invertInDark:true },
+  { id:"carto",url:() => `https://{s}.basemaps.cartocdn.com/${isDark() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, opt:{ subdomains:"abcd", maxZoom:19 },
+    attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  { id:"osm",  url:() => "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opt:{ maxZoom:19 },
+    attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', invertInDark:true },
+];
+let provIdx = 0;
+function applyTileTone(){
+  const inv = isDark() && PROVIDERS[provIdx].invertInDark;
+  document.documentElement.classList.toggle("tiles-invert", !!inv);
+}
+const tileLayers = []; // {layer, withAttr, map}
+function makeTiles(targetMap, withAttr){
+  const pv = PROVIDERS[provIdx];
+  const layer = L.tileLayer(pv.url(), Object.assign({ attribution: withAttr ? pv.attr : "" }, pv.opt)).addTo(targetMap);
+  const rec = { layer, withAttr, map: targetMap, errs:0, oks:0 };
+  layer.on("tileload", () => { rec.oks++; if(withAttr && $("#geoNote").dataset.kind === "tile") { geoNote(""); } });
+  layer.on("tileerror", () => {
+    rec.errs++;
+    if(rec.oks === 0 && rec.errs >= 4){
+      if(provIdx < PROVIDERS.length - 1){ provIdx++; rebuildTiles(); }
+      else if(withAttr){ geoNote("地図の画像を読み込めません。通信状態や、広告ブロックなどの設定を確認してください。", "tile"); }
+    }
+  });
+  tileLayers.push(rec);
+  return layer;
+}
+function rebuildTiles(){
+  const olds = tileLayers.splice(0);
+  olds.forEach(r => { r.map.removeLayer(r.layer); makeTiles(r.map, r.withAttr); });
+  applyTileTone();
+}
 function initMap(){
   if(!hasL){ geoNote("地図ライブラリを読み込めませんでした。通信状態を確認して再読み込みしてください。"); return; }
   map = L.map("map", { zoomControl:false, attributionControl:true }).setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 15);
-  tiles = makeTiles(true).addTo(map);
+  map.attributionControl.setPrefix(false);
+  makeTiles(map, true);
+  applyTileTone();
   markerLayer = L.layerGroup().addTo(map);
-  darkQ.addEventListener?.("change", () => { if(!useOSM) tiles.setUrl(tileUrl()); renderAll(); });
+  darkQ.addEventListener?.("change", () => { if(PROVIDERS[provIdx].id === "carto") rebuildTiles(); applyTileTone(); renderAll(); });
   window.addEventListener("resize", () => map.invalidateSize());
   setTimeout(() => map.invalidateSize(), 300);
 }
@@ -457,12 +513,12 @@ function fitAll(){
   if(pts.length > 1) map.fitBounds(pts, { padding:[50,50], maxZoom:16 });
   else if(pts.length === 1) map.setView(pts[0], 16);
 }
-function geoNote(msg){ const n = $("#geoNote"); n.textContent = msg; n.hidden = !msg; }
+function geoNote(msg, kind){ const n = $("#geoNote"); n.textContent = msg || ""; n.dataset.kind = kind || ""; n.hidden = !msg; }
 
 function onPos(pos){
   const first = !me;
   me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
-  geoNote("");
+  if($("#geoNote").dataset.kind !== "tile") geoNote("");
   if(map){
     if(!meMarker){
       meMarker = L.marker([me.lat, me.lng], { icon: L.divIcon({ className:"", html:'<div class="me-dot"></div>', iconSize:[16,16], iconAnchor:[8,8] }), interactive:false, zIndexOffset:1000 }).addTo(map);
@@ -661,8 +717,8 @@ function setupMiniMap(){
   const start = me || (map ? map.getCenter() : DEFAULT_CENTER);
   if(!miniMap){
     miniMap = L.map("miniMap", { zoomControl:false, attributionControl:false }).setView([start.lat, start.lng], 17);
-    makeTiles(false).addTo(miniMap);
-    miniMarker = L.marker([start.lat, start.lng], { draggable:true }).addTo(miniMap);
+    makeTiles(miniMap, false);
+    miniMarker = L.marker([start.lat, start.lng], { draggable:true, icon: L.divIcon({ className:"", html:'<div class="pick-pin"></div>', iconSize:[28,36], iconAnchor:[14,34] }) }).addTo(miniMap);
     miniMarker.on("dragend", () => { const ll = miniMarker.getLatLng(); setPickLoc({lat:ll.lat,lng:ll.lng}, false); });
     miniMap.on("click", e => { miniMarker.setLatLng(e.latlng); setPickLoc({lat:e.latlng.lat,lng:e.latlng.lng}, false); });
   }
