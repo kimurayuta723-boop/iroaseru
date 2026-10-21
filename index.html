@@ -104,6 +104,10 @@ main{position:absolute;inset:0}
 .card b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .m{font-size:11.5px;color:var(--muted);display:flex;gap:8px;white-space:nowrap}
 .card .m .u{color:var(--warn)}
+.card .m .near{color:var(--ink);font-weight:700;display:flex;align-items:center;gap:5px}
+.card .m .near::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink)}
+.card.is-near{border-color:var(--hair-2)}
+.mk-wrap.near::before{content:"";position:absolute;left:-7px;top:-7px;width:50px;height:50px;border-radius:50%;border:2px solid var(--ink);opacity:.35;pointer-events:none}
 .card-txt{min-width:0}
 
 /* ピン */
@@ -274,6 +278,8 @@ label.f textarea{min-height:72px;resize:vertical}
   .toast{animation:toastIn .3s cubic-bezier(.2,.8,.2,1)}
   @keyframes toastIn{from{transform:translate(-50%,-10px);opacity:0}}
   .view.enter{animation:fadeIn .2s ease-out}
+  .mk-wrap.near::before{animation:nearPulse 2s ease-out infinite}
+  @keyframes nearPulse{0%{transform:scale(.72);opacity:.55}100%{transform:scale(1.25);opacity:0}}
   @keyframes fadeIn{from{opacity:.4}}
 }
 
@@ -699,8 +705,9 @@ function renderMarkers(){
   markerLayer.clearLayers();
   state.places.filter(visible).forEach(p => {
     const m = L.marker([p.lat, p.lng], {
-      icon: L.divIcon({ className:"mk-wrap", html: markerSVG(p), iconSize:[36,36], iconAnchor:[18,18] }),
-      title: p.name, keyboard: true, riseOnHover: true
+      icon: L.divIcon({ className: "mk-wrap" + (isNear(p) ? " near" : ""), html: markerSVG(p), iconSize:[36,36], iconAnchor:[18,18] }),
+      title: p.name, keyboard: true, riseOnHover: true,
+      zIndexOffset: isNear(p) ? 500 : 0
     }).addTo(markerLayer);
     m.on("click", () => openDetail(p.id));
   });
@@ -729,8 +736,9 @@ function onPos(pos){
     if(!state.samplesPlaced && state.places.some(p=>p.sample)) placeSamplesNear(me);
     else if(map) map.setView([me.lat, me.lng], 16);
   }
+  const key = state.places.filter(isNear).map(p => p.id).join(",");
+  if(key !== nearKey){ nearKey = key; renderMarkers(); }
   renderStrip();
-  checkNearby();
   if(pickCtx && pickCtx.mode === "new" && pickCtx.autoLoc) setPickLoc(me, true);
 }
 function onPosErr(err){
@@ -745,20 +753,9 @@ function startGeo(){
   if(!window.isSecureContext){ geoNote("位置情報は https:// で開いたときだけ使えます。"); }
   navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy:true, maximumAge:15000, timeout:20000 });
 }
-const notified = new Set();
-let lastStrip = 0;
-function checkNearby(){
-  if(!me) return;
-  const hit = state.places
-    .filter(p => statusOf(p) === "want" && !notified.has(p.id))
-    .map(p => ({ p, d: distM(me, p) }))
-    .filter(x => x.d <= NEAR_M)
-    .sort((a,b) => a.d - b.d)[0];
-  if(!hit) return;
-  notified.add(hit.p.id);
-  toast(`近くに<b>${esc(hit.p.name)}</b>があります。${fmtDist(hit.d)}先、残り${daysLeft(hit.p)}日。`, nowColor(hit.p), "見る", () => openDetail(hit.p.id));
-  try{ navigator.vibrate?.(60); }catch(e){}
-}
+/* 200m以内の行きたい店(画面内の表示だけで知らせる) */
+const isNear = p => !!me && statusOf(p) === "want" && distM(me, p) <= NEAR_M;
+let nearKey = "";
 
 /* ---------- 描画 ---------- */
 function renderStrip(){
@@ -770,9 +767,9 @@ function renderStrip(){
   el.hidden = !list.length;
   el.innerHTML = list.slice(0, 12).map(p => {
     const left = daysLeft(p);
-    return `<button class="card glass press" data-fly="${p.id}">
+    return `<button class="card glass press${isNear(p) ? " is-near" : ""}" data-fly="${p.id}">
       <span class="cs" style="--now:${nowColor(p)};--orig:${p.color}"></span>
-      <span class="card-txt"><b>${esc(p.name)}</b><span class="m">${me ? `<span>${fmtDist(distM(me,p))}</span>` : ""}<span class="${left<=14?"u":""}">残り${left}日</span></span></span></button>`;
+      <span class="card-txt"><b>${esc(p.name)}</b><span class="m">${isNear(p) ? '<span class="near">すぐ近く</span>' : (me ? `<span>${fmtDist(distM(me,p))}</span>` : "")}<span class="${left<=14?"u":""}">残り${left}日</span></span></span></button>`;
   }).join("");
 }
 function chipHTML(p){
@@ -994,7 +991,6 @@ $("#btnSave").addEventListener("click", () => {
   const p = { id: uid(), name: $("#fName").value.trim(), memo: $("#fMemo").value.trim(), color: pickCtx.color,
     lat: loc.lat, lng: loc.lng, savedAt: Date.now(), visitedAt: null, visitColor: null, photo: pickCtx.photo };
   state.places.push(p); persist(); closeS(); renderAll();
-  notified.add(p.id);
   toast(`${dento(p.color).name}の<b>${esc(p.name)}</b>を保存しました。90日以内に行きましょう。`, p.color);
   if(map){ show("map"); map.flyTo([p.lat,p.lng], 16, { duration:.6 }); }
 });
