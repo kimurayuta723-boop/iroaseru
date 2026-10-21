@@ -158,6 +158,21 @@ main{position:absolute;inset:0}
 
 /* ---------- 記録 ---------- */
 .month{margin-bottom:34px}
+.sort{display:flex;gap:6px;margin:-4px 0 22px}
+.rmeta{display:flex;align-items:center;gap:10px}
+.rt{display:flex;gap:2px}
+.rt i{width:5px;height:5px;border-radius:50%;background:var(--hair-2)}
+.rt i.on{background:var(--ink)}
+.rate{border:1px solid var(--hair);border-radius:14px;padding:12px 12px 10px;margin:0 0 18px;background:var(--surface);transition:border-color .3s}
+.rate.ask{border-color:var(--ink)}
+.rate-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.rate-h b{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:500}
+.rate-h span{font-family:var(--f-display);font-size:15px;font-weight:700;letter-spacing:.08em}
+.rate-sw{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.rate-sw button{height:46px;border:0;border-radius:8px;padding:0;position:relative;box-shadow:inset 0 0 0 1px rgb(0 0 0 / .05);transition:transform .15s ease}
+.rate-sw button span{position:absolute;left:7px;bottom:4px;font-family:var(--f-mono);font-size:10px;color:rgb(25 28 30 / .55)}
+.rate-sw button[aria-checked="true"]{transform:translateY(-3px);box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ink)}
+.rate-ends{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:6px}
 .month-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
 .month-h b{font-family:var(--f-display);font-size:24px;letter-spacing:.06em}
 .month-h span{font-family:var(--f-mono);font-size:11px;color:var(--muted);letter-spacing:.08em}
@@ -356,6 +371,10 @@ label.f textarea{min-height:72px;resize:vertical}
       <div class="page-h">
         <div><p class="eyebrow">Archive</p><h2>記録</h2></div>
         <p>行った店の色を<br>月ごとに</p>
+      </div>
+      <div class="sort" role="group" aria-label="並べ方" id="archSort">
+        <button class="pill" data-sort="date" aria-pressed="true">新しい順</button>
+        <button class="pill" data-sort="rate" aria-pressed="false">評価の高い順</button>
       </div>
       <div id="archive"></div>
       <div class="sec"><h3>データ</h3><span>この端末だけに保存されています</span></div>
@@ -577,7 +596,13 @@ const daysSince = t => (Date.now() - t) / DAY;
 function fadeOf(p){ return p.visitedAt ? 1 : Math.pow(.5, daysSince(p.savedAt) / HALF); }
 function statusOf(p){ if(p.visitedAt) return "done"; return daysSince(p.savedAt) >= LIMIT ? "shelf" : "want"; }
 function daysLeft(p){ return Math.max(0, Math.ceil(LIMIT - daysSince(p.savedAt))); }
-function nowColor(p){ return p.visitedAt ? (p.visitColor || p.color) : fadedHex(p.color, fadeOf(p)); }
+/* 評価:心に残った色の濃さ(1〜5) */
+const RATE_F = [0, .12, .3, .52, .76, 1];
+const RATE_LABEL = ["", "もう行かない", "いまひとつ", "ふつう", "また行きたい", "とっておき"];
+const ratedColor = (hex, r) => fadedHex(hex, RATE_F[r]);
+const visitHex = p => p.visitColor || p.color;
+const archiveColor = p => p.rating ? ratedColor(visitHex(p), p.rating) : visitHex(p);
+function nowColor(p){ return p.visitedAt ? archiveColor(p) : fadedHex(p.color, fadeOf(p)); }
 const fmtDate = t => { const d=new Date(t); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`; };
 const fmtMD = t => { const d=new Date(t); return `${d.getMonth()+1}/${d.getDate()}`; };
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -800,18 +825,34 @@ function renderPalette(){
   $("#chipsShelf").innerHTML = shelf.length ? shelf.map(chipHTML).join("") : '<div class="empty">灰色になった店はありません。</div>';
   $("#sampleBar").hidden = !state.places.some(p=>p.sample);
 }
+let archSort = "date";
+function rowHTML(p){
+  const r = p.rating ? `<span class="rt" title="${RATE_LABEL[p.rating]}">${[1,2,3,4,5].map(i=>`<i class="${i<=p.rating?"on":""}"></i>`).join("")}</span>` : "";
+  return `<button class="row" data-open="${p.id}"><i style="background:${archiveColor(p)}"></i><b>${esc(p.name)}${p.sample?' <span>見本</span>':""}<span class="cn">${dento(visitHex(p)).name}</span></b><span class="rmeta">${r}<span class="mono">${fmtMD(p.visitedAt)}</span></span></button>`;
+}
+const bandHTML = ps => `<div class="band">${ps.map(p=>`<button class="press" data-open="${p.id}" style="background:${archiveColor(p)}" aria-label="${esc(p.name)}"></button>`).join("")}</div>`;
 function renderArchive(){
   const done = state.places.filter(p => p.visitedAt).sort((a,b)=>b.visitedAt-a.visitedAt);
+  $("#archSort").hidden = done.length < 2;
   if(!done.length){ $("#archive").innerHTML = '<div class="empty">行った店はまだありません。<br>行きたい店に着いたら、もう一度色を拾うとここに並びます。</div>'; return; }
+  if(archSort === "rate"){
+    const ps = done.slice().sort((a,b) => (b.rating||0) - (a.rating||0) || b.visitedAt - a.visitedAt);
+    $("#archive").innerHTML = `<div class="month"><div class="month-h"><b>評価順</b><em>${ps.length}軒</em></div>${bandHTML(ps)}<div class="rows">${ps.map(rowHTML).join("")}</div></div>`;
+    return;
+  }
   const groups = new Map();
   done.forEach(p => { const d=new Date(p.visitedAt); const k=`${d.getFullYear()}-${d.getMonth()+1}`; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(p); });
   $("#archive").innerHTML = [...groups].map(([k, ps]) => { const [y,m] = k.split("-");
     return `<div class="month">
       <div class="month-h"><b>${m}月</b><span>${y}</span><em>${ps.length}軒</em></div>
-      <div class="band">${ps.slice().reverse().map(p=>`<button class="press" data-open="${p.id}" style="background:${p.visitColor||p.color}" aria-label="${esc(p.name)}"></button>`).join("")}</div>
-      <div class="rows">${ps.map(p=>`<button class="row" data-open="${p.id}"><i style="background:${p.visitColor||p.color}"></i><b>${esc(p.name)}${p.sample?' <span>見本</span>':""}<span class="cn">${dento(p.visitColor||p.color).name}</span></b><span class="mono">${fmtMD(p.visitedAt)}</span></button>`).join("")}</div>
+      ${bandHTML(ps.slice().reverse())}
+      <div class="rows">${ps.map(rowHTML).join("")}</div>
     </div>`; }).join("");
 }
+document.addEventListener("click", e => {
+  const b = e.target.closest("#archSort [data-sort]"); if(!b) return;
+  archSort = b.dataset.sort; $$("#archSort .pill").forEach(x => x.setAttribute("aria-pressed", x===b)); renderArchive();
+});
 function renderTally(){
   $("#tWant").textContent = state.places.filter(p=>statusOf(p)==="want").length;
   $("#tDone").textContent = state.places.filter(p=>p.visitedAt).length;
@@ -983,8 +1024,8 @@ $("#btnSave").addEventListener("click", () => {
   if(pickCtx.mode === "visit"){
     const p = state.places.find(x=>x.id===pickCtx.placeId);
     p.visitedAt = Date.now(); p.visitColor = pickCtx.color; if(pickCtx.photo) p.visitPhoto = pickCtx.photo;
-    persist(); closeS(); renderAll(); openDetail(p.id);
-    toast(`<b>${esc(p.name)}</b>を行った店にしました。`, p.visitColor, "記録を見る", () => { closeS(); show("archive"); });
+    persist(); closeS(); renderAll(); openDetail(p.id, { askRate:true });
+    toast(`<b>${esc(p.name)}</b>を行った店にしました。`, p.visitColor);
     return;
   }
   const loc = pickCtx.loc || (miniMarker ? (()=>{ const ll=miniMarker.getLatLng(); return {lat:ll.lat,lng:ll.lng}; })() : (me || DEFAULT_CENTER));
@@ -1000,12 +1041,26 @@ function dentoBlock(hex, label){
   const d = dento(hex);
   return `<div class="dt"><i style="background:${hex}"></i><div><span class="kana">${d.kana}</span><b>${d.name}${d.near ? '<small>に近い色</small>' : ""}</b><span class="mono">${label ? label + " " : ""}${hex}</span></div></div>`;
 }
+function rateHTML(p, ask){
+  const vc = visitHex(p);
+  return `<section class="rate${ask && !p.rating ? " ask" : ""}" id="rateRow">
+    <div class="rate-h"><b>心に残った色</b><span id="rateLabel">${p.rating ? RATE_LABEL[p.rating] : (ask ? "どのくらい色が残りましたか" : "評価を付ける")}</span></div>
+    <div class="rate-sw" role="radiogroup" aria-label="評価">${[1,2,3,4,5].map(r =>
+      `<button type="button" data-rate="${r}" role="radio" aria-checked="${p.rating===r}" aria-label="${r} ${RATE_LABEL[r]}" style="background:${ratedColor(vc, r)}"><span>${r}</span></button>`).join("")}</div>
+    <div class="rate-ends"><span>${RATE_LABEL[1]}</span><span>${RATE_LABEL[5]}</span></div>
+  </section>`;
+}
+function updateRate(p){
+  $$("#rateRow [data-rate]").forEach(b => b.setAttribute("aria-checked", String(+b.dataset.rate === p.rating)));
+  $("#rateLabel").textContent = p.rating ? RATE_LABEL[p.rating] : "評価を付ける";
+  $("#rateRow").classList.remove("ask");
+}
 function cnameHTML(p){
   if(p.visitedAt && p.visitColor && p.visitColor !== p.color)
     return `<div class="cname two">${dentoBlock(p.color, "拾った色")}<em>→</em>${dentoBlock(p.visitColor, "行った日")}</div>`;
   return `<div class="cname">${dentoBlock(p.visitColor || p.color, "")}</div>`;
 }
-function openDetail(id){
+function openDetail(id, opt = {}){
   const p = state.places.find(x=>x.id===id); if(!p) return;
   const st = statusOf(p), f = fadeOf(p), d = daysSince(p.savedAt), now = nowColor(p);
   const sample = p.sample ? '<span class="tag">見本</span>' : "";
@@ -1032,6 +1087,7 @@ function openDetail(id){
   $("#dBody").innerHTML = `
     ${hero}
     ${cnameHTML(p)}
+    ${st === "done" ? rateHTML(p, opt.askRate) : ""}
     ${timeline}
     <dl class="stats">${stats}</dl>
     ${p.memo ? `<p class="memo">${esc(p.memo)}</p>` : ""}
@@ -1047,6 +1103,11 @@ function openDetail(id){
       <div class="confirm" id="dConfirm" hidden><p>「${esc(p.name)}」を削除します。元に戻せません。</p><div class="btns"><button class="btn sub" id="dNo">やめる</button><button class="btn danger" id="dYes">削除する</button></div></div>
     </div>`;
   openS($("#sheetDetail"));
+  $$("#rateRow [data-rate]").forEach(b => b.addEventListener("click", () => {
+    const r = +b.dataset.rate;
+    p.rating = p.rating === r ? null : r;   // 同じ段階をもう一度押すと評価を外す
+    persist(); renderAll(); updateRate(p);
+  }));
   $("#dVisit")?.addEventListener("click", () => {
     if(me){ const dd = distM(me,p); if(dd > 300) toast(`店から${fmtDist(dd)}離れています。着いてから撮るのがおすすめです。`); }
     startPick("visit", p.id);
